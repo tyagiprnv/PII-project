@@ -1,0 +1,8 @@
+global:
+  scrape_interval: 15s # How often to pull data
+
+scrape_configs:
+  - job_name: "iron-clad-gateway"
+    static_configs:
+      # 'api:8000' matches the service name and port in docker-compose
+      - targets: ["api:8000"]
