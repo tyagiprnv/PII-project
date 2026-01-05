@@ -1,31 +1,73 @@
+"""
+LLM-based verification agent for detecting PII leaks in redacted text.
+
+Uses advanced prompt engineering techniques (few-shot, chain-of-thought)
+to improve leak detection accuracy.
+"""
 import httpx
+from app.config import get_settings
+from app.prompts.verification_prompts import get_prompt
+
 
 class VerificationAgent:
-    def __init__(self):
-        self.ollama_url = "http://ollama:11434/api/generate"
+    """
+    LLM-powered agent for verifying PII redaction quality.
 
-    async def check_for_leaks(self, redacted_text: str):
-        prompt = f"""
-        You are a Privacy Security Auditor. Your job is to find any UNREDACTED 
-        Personally Identifiable Information (PII) in the text below.
-        PII includes: Names, Emails, SSNs, Phone Numbers, or ID numbers.
-        Text to check: "{redacted_text}"
-        
-        Return ONLY a JSON object with:
-        "leaked": true/false,
-        "reason": "explanation of what was missed"
+    Supports multiple prompt strategies configurable via settings.
+    """
+
+    def __init__(self):
+        """Initialize with configuration from settings."""
+        self.settings = get_settings()
+        self.ollama_url = self.settings.ollama_url
+        self.model = self.settings.ollama_model
+        self.timeout = self.settings.ollama_timeout
+        self.prompt_version = self.settings.prompt_version
+
+    async def check_for_leaks(self, redacted_text: str, prompt_version: str = None) -> dict:
         """
-        
-        async with httpx.AsyncClient() as client:
+        Check redacted text for PII leaks using LLM.
+
+        Args:
+            redacted_text: Text that has been redacted
+            prompt_version: Optional prompt version override (v1_basic, v2_cot, v3_few_shot)
+
+        Returns:
+            Dictionary with 'leaked' (bool), 'reason' (str), and optional 'error'
+        """
+        # Use specified version or default from config
+        version = prompt_version or self.prompt_version
+
+        # Generate prompt using advanced prompting system
+        prompt = get_prompt(
+            version=version,
+            text=redacted_text,
+            num_examples=self.settings.few_shot_examples_count
+        )
+
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:
-                response = await client.post(self.ollama_url, json={
-                    "model": "phi3",
-                    "prompt": prompt,
-                    "stream": False,
-                    "format": "json"
-                })
-                return response.json().get("response")
+                response = await client.post(
+                    self.ollama_url,
+                    json={
+                        "model": self.model,
+                        "prompt": prompt,
+                        "stream": False,
+                        "format": "json"
+                    }
+                )
+
+                if response.status_code == 200:
+                    return response.json().get("response")
+                else:
+                    # Return safe default on error
+                    return {"leaked": False, "error": f"HTTP {response.status_code}"}
+
+            except httpx.TimeoutException:
+                return {"leaked": False, "error": "Timeout waiting for LLM response"}
             except Exception as e:
                 return {"leaked": False, "error": str(e)}
 
+
+# Global verifier instance
 verifier = VerificationAgent()
