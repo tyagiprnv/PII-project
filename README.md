@@ -2,7 +2,7 @@
 
 **Enterprise-grade PII redaction gateway with AI-powered compliance enforcement.**
 
-Three-layer security architecture combining NLP detection, policy-based compliance (HIPAA/PCI-DSS/GDPR), and LLM verification. Production-ready with authentication, audit trails, and Kubernetes deployment.
+Three-layer security architecture combining NLP detection, policy-based compliance (HIPAA/PCI-DSS/GDPR), and LLM verification. Production-ready with authentication, audit trails, and Docker deployment.
 
 ---
 
@@ -243,28 +243,29 @@ USE_CHAIN_OF_THOUGHT=true
 
 ## Production Deployment
 
-### Kubernetes + Helm
+### Docker Deployment
+
+For production deployment, use the included `docker-compose.yml` with appropriate environment configuration:
 
 ```bash
-# Deploy with Helm
-helm install sentinel k8s/helm/sentinel/ \
-  --namespace pii-gateway \
-  --create-namespace
+# Set production environment variables
+cp .env.example .env
+# Edit .env with production credentials
 
-# Or apply base manifests
-kubectl apply -f k8s/base/
+# Start all services
+docker-compose up -d
 
-# Check deployment
-kubectl get pods -l app=sentinel-api
+# Initialize database
+docker-compose exec api uv run python scripts/init_db.py
 ```
 
-**Production Features:**
-- Horizontal Pod Autoscaling (HPA) for traffic spikes
-- Redis StatefulSet with persistent volumes
-- PostgreSQL connection pooling
-- GPU-enabled nodes for Ollama
-- TLS ingress with cert-manager
-- Prometheus + Grafana monitoring
+**Production Considerations:**
+- Redis persistence for PII token storage
+- PostgreSQL with connection pooling via SQLAlchemy
+- Secure secret management (environment variables, secret stores)
+- Resource limits configured per container
+- TLS termination via reverse proxy (nginx, traefik)
+- Prometheus + Grafana monitoring stack included
 
 ### CI/CD (GitHub Actions)
 
@@ -308,7 +309,7 @@ kubectl get pods -l app=sentinel-api
 
 **Core:** FastAPI, Presidio (NLP), Phi-3 LLM (Ollama), Redis, PostgreSQL, SQLAlchemy
 **Testing:** pytest (85% coverage), fakeredis, respx, aiosqlite
-**Deployment:** Docker, Kubernetes, Helm
+**Deployment:** Docker, Docker Compose
 **Monitoring:** Prometheus, Grafana
 **Package Management:** uv (fast Python resolver)
 
@@ -330,9 +331,7 @@ PII-project/
 │   ├── unit/            # Unit tests
 │   └── integration/     # Integration tests
 ├── evaluation/           # Benchmark suite (43 cases)
-├── k8s/                  # Kubernetes deployment
-│   ├── base/            # Base manifests
-│   └── helm/sentinel/   # Helm chart
+├── scripts/              # Utility scripts
 ├── .github/workflows/   # CI/CD pipelines
 └── docker-compose.yml   # Local development stack
 ```
