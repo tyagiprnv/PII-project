@@ -9,7 +9,12 @@ wheels/
 # Virtual environments
 .venv
 
-.github/
+# Environment files (CRITICAL - contains secrets)
+.env
+.env.local
+.env.*.local
+
+# Docker volumes
 ollama_data/
 
 .coverage

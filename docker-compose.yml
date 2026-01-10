@@ -4,16 +4,37 @@ services:
     build: .
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     depends_on:
       - redis
+      - postgres
     environment:
       - REDIS_HOST=redis
+      - POSTGRES_HOST=postgres
 
   # This is the "Whiteboard" (Redis)
   redis:
     image: "redis:alpine"
     ports:
       - "6379:6379"
+
+  # PostgreSQL database for audit logs and API keys
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-sentinel}
+      POSTGRES_USER: ${POSTGRES_USER:-sentinel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sentinel}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   prometheus:
     image: prom/prometheus:latest
@@ -27,7 +48,7 @@ services:
     ports:
       - "3000:3000"
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin # Default login: admin / admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
     depends_on:
       - prometheus
 
@@ -37,3 +58,6 @@ services:
       - "11434:11434"
     volumes:
       - ./ollama_data:/root/.ollama
+
+volumes:
+  postgres_data:
