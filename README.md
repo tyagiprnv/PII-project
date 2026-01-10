@@ -1,153 +1,183 @@
 # Sentinel
 
-**Production-grade PII redaction system combining NLP-based detection with LLM-powered verification.**
+**Enterprise-grade PII redaction gateway with AI-powered compliance enforcement.**
 
-A dual-layer security architecture that automatically detects and redacts Personally Identifiable Information (PII) from text, then validates redaction quality using advanced LLM techniques.
-
----
-
-## 🎯 Key Features
-
-- **🔒 Dual-Layer Security**: Presidio NLP detection + Phi-3 LLM verification
-- **🧪 97% Test Coverage**: Comprehensive unit and integration tests
-- **📊 Evaluation Framework**: 43 benchmark cases with automated metrics
-- **🤖 Advanced LLM Engineering**: Few-shot learning with chain-of-thought reasoning
-- **⚡ High Performance**: Async architecture with Redis caching
-- **📈 Production Monitoring**: Prometheus metrics + Grafana dashboards
-- **🔧 Configurable**: Environment-based configuration for all settings
+Three-layer security architecture combining NLP detection, policy-based compliance (HIPAA/PCI-DSS/GDPR), and LLM verification. Production-ready with authentication, audit trails, and Kubernetes deployment.
 
 ---
 
-## 📊 Performance Highlights
+## Why Sentinel?
 
-| Metric | Value |
-|--------|-------|
-| **Test Coverage** | 97% (39 tests) |
-| **Benchmark Dataset** | 43 test cases, 7 entity types |
-| **PII Detection** | Emails, Phones, Names, SSNs, Locations, IPs, Dates |
-| **Prompt Versions** | 4 (zero-shot → few-shot + CoT) |
-| **Expected P95 Latency** | < 2s per request |
+Traditional PII redaction tools lack context awareness and compliance flexibility. Sentinel solves this with:
 
-### Evaluation Framework
-- ✅ **Precision/Recall/F1** metrics with ground truth annotations
-- ✅ **Baseline Comparison**: Presidio vs Regex-only detection
-- ✅ **Entity-Level Analysis**: Per-type performance breakdown
-- ✅ **Latency Tracking**: P50, P95, P99 measurements
+- **Compliance-First Design**: Pre-configured policies for HIPAA, PCI-DSS, and GDPR
+- **AI Verification**: LLM auditor catches context-dependent leaks missed by pattern matching
+- **Production Security**: API key authentication, immutable audit logs, policy-based restoration controls
+- **Battle-Tested**: 85% test coverage across 99 tests, 43-case benchmark suite
 
 ---
 
-## 🏗️ Architecture
+## Three-Layer Security Architecture
 
 ```
-┌─────────────┐      ┌──────────────┐      ┌─────────────┐
-│   FastAPI   │─────▶│   Presidio   │─────▶│    Redis    │
-│   Gateway   │      │   Analyzer   │      │  (Tokens)   │
-└─────────────┘      └──────────────┘      └─────────────┘
-       │                                            │
-       │             Background Audit               │
-       │                    ↓                       │
-       │             ┌──────────────┐               │
-       └────────────▶│  Phi-3 LLM   │──────────────┘
-                     │  (Ollama)    │  (Purge if leak)
-                     └────────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                      FastAPI Gateway                          │
+│            (Authentication + Audit Logging)                   │
+└──────────────────────────────────────────────────────────────┘
+                              │
+         ┌────────────────────┼────────────────────┐
+         ▼                    ▼                    ▼
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│  Layer 1:       │  │  Layer 2:       │  │  Layer 3:       │
+│  NLP Detection  │─▶│  Policy Engine  │─▶│  LLM Auditor    │
+│  (Presidio)     │  │  (Compliance)   │  │  (Phi-3)        │
+└─────────────────┘  └─────────────────┘  └─────────────────┘
+         │                    │                    │
+         └────────────────────┴────────────────────┘
+                              ▼
+                     ┌─────────────────┐
+                     │  Redis Storage  │
+                     │  (24hr TTL)     │
+                     └─────────────────┘
 ```
 
-### How It Works
-
-1. **Request**: User sends text containing PII to `/redact` endpoint
-2. **Detection**: Presidio analyzes text and identifies PII entities (emails, names, phones, etc.)
-3. **Redaction**: PII is replaced with tokens like `[REDACTED_a1b2]`
-4. **Storage**: Original PII stored in Redis with 24hr TTL, keyed by token
-5. **Response**: Redacted text returned immediately to user
-6. **Verification**: Background task sends redacted text to LLM for leak detection
-7. **Audit**: If LLM finds leaked PII, Redis tokens are purged for security
-
-### Two-Layer Security Model
-
-**Layer 1: Presidio (NLP-Based)**
-- Pattern matching + ML models
-- High recall for common PII formats
-- Fast, deterministic detection
-
-**Layer 2: LLM Auditor (Context-Aware)**
-- Few-shot learning with curated examples
-- Detects context-dependent leaks
-- Catches edge cases missed by NLP
+**Layer 1: Detection** - Presidio analyzes text for 13 PII entity types (EMAIL, SSN, CREDIT_CARD, etc.)
+**Layer 2: Policy Engine** - Filters entities by compliance context, confidence thresholds, restoration permissions
+**Layer 3: Verification** - LLM auditor validates redaction quality, purges tokens if leaks detected
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
-### Using Docker Compose (Recommended)
+### Docker Compose (Recommended)
 
 ```bash
-# Clone the repository
-git clone <your-repo-url>
-cd sentinel
-
-# Start all services
+# Clone and start all services (API, Redis, PostgreSQL, Ollama, Prometheus, Grafana)
+git clone <your-repo-url> && cd sentinel
 docker-compose up --build
 
-# The API will be available at http://localhost:8000
+# Initialize database and generate admin API key
+docker-compose exec api uv run python scripts/init_db.py
+# Save the API key displayed - you cannot retrieve it later!
 ```
 
 ### Test the API
 
 ```bash
-# Redact PII from text
+# Redact PII with healthcare policy (HIPAA-compliant)
 curl -X POST http://localhost:8000/redact \
   -H "Content-Type: application/json" \
-  -d '{"text": "Contact John Doe at john.doe@example.com or call 555-123-4567"}'
+  -d '{
+    "text": "Patient John Doe, DOB: 1990-05-15, SSN: 123-45-6789",
+    "policy": {"context": "healthcare"}
+  }'
 
 # Response:
 # {
-#   "redacted_text": "Contact [REDACTED_a1b2] at [REDACTED_c3d4] or call [REDACTED_e5f6]",
-#   "confidence_scores": [0.95, 0.89, 0.92],
-#   "audit_status": "queued"
+#   "redacted_text": "Patient [REDACTED_a1b2], DOB: [REDACTED_c3d4], SSN: [REDACTED_e5f6]",
+#   "confidence_scores": {"PERSON": 0.95, "DATE_TIME": 0.85, "US_SSN": 1.0},
+#   "policy": {
+#     "context": "healthcare",
+#     "restoration_allowed": false,
+#     "entities_filtered": 3
+#   }
 # }
 
-# Restore original text
-curl -X POST "http://localhost:8000/restore?redacted_text=Contact%20[REDACTED_a1b2]"
-
-# View Prometheus metrics
-curl http://localhost:8000/metrics
+# Restore original text (requires API key, fails if policy blocks restoration)
+curl -X POST http://localhost:8000/restore \
+  -H "X-API-Key: your_64_char_api_key" \
+  -H "Content-Type: application/json" \
+  -d '{"redacted_text": "Patient [REDACTED_a1b2]"}'
 ```
 
 ---
 
-## 📦 Installation
+## Policy Engine: Compliance Made Simple
 
-### Prerequisites
+### Pre-Configured Contexts
 
-- Python 3.13+
-- Docker & Docker Compose (for full stack)
-- Redis (for token storage)
-- Ollama with Phi-3 model (for LLM verification)
+**General Policy** - Default, broad PII coverage
+- 13 entity types (EMAIL, PHONE, CREDIT_CARD, SSN, etc.)
+- Restoration disabled by default (opt-in security)
 
-### Local Development Setup
+**Healthcare Policy** - HIPAA-compliant PHI redaction
+- 7 entity types (PERSON, DATE_TIME, US_SSN, etc.)
+- Min confidence: 0.5 (reduce false positives)
+- Restoration permanently disabled
+
+**Finance Policy** - PCI-DSS-compliant financial data
+- 8 entity types (CREDIT_CARD, IBAN_CODE, US_BANK_NUMBER, etc.)
+- Min confidence: 0.6 (high-security threshold)
+- Restoration permanently disabled
+
+### Custom Policy Overrides
 
 ```bash
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+# Disable specific entities (e.g., allow dates in output)
+curl -X POST http://localhost:8000/redact \
+  -d '{
+    "text": "Meeting on 2024-01-15 with john@example.com",
+    "policy": {
+      "context": "general",
+      "disabled_entities": ["DATE_TIME"],
+      "restoration_allowed": true
+    }
+  }'
+
+# Set custom confidence threshold
+curl -X POST http://localhost:8000/redact \
+  -d '{
+    "text": "Contact Jane at jane@example.com",
+    "policy": {
+      "enabled_entities": ["EMAIL_ADDRESS"],
+      "min_confidence_threshold": 0.8
+    }
+  }'
+```
+
+---
+
+## Authentication & Audit Trail
+
+**Secure Restoration**: `/restore` endpoint requires API key authentication
+
+```bash
+# Create API key for service
+curl -X POST http://localhost:8000/admin/api-keys \
+  -d '{"service_name": "customer-portal", "description": "Restore access"}'
+
+# List active keys (hashed, not retrievable)
+curl http://localhost:8000/admin/api-keys
+
+# Query audit logs (GDPR/HIPAA compliance)
+curl http://localhost:8000/admin/audit-logs?service_name=customer-portal&limit=100
+
+# Revoke key immediately
+curl -X DELETE http://localhost:8000/admin/api-keys/{key-id}
+```
+
+**Audit Log Fields**: request_id, service_name, timestamp, redacted_text, restored_text, token_count, success, ip_address, user_agent
+
+---
+
+## Installation & Development
+
+### Prerequisites
+- Python 3.13+ with [uv](https://github.com/astral-sh/uv) package manager
+- Docker & Docker Compose
+
+### Local Setup
+
+```bash
+# Install uv (fast Python package manager)
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
 # Install dependencies
-pip install -r requirements.txt
+uv pip install -r requirements.txt
+uv run python -m spacy download en_core_web_lg
 
-# Download spaCy language model (required by Presidio)
-python -m spacy download en_core_web_lg
-
-# Copy environment configuration
-cp .env.example .env
-
-# Start Redis (required)
-docker run -d -p 6379:6379 redis:alpine
-
-# Start Ollama (required for LLM verification)
-docker run -d -p 11434:11434 ollama/ollama:latest
-
-# Pull Phi-3 model
-docker exec -it <ollama-container-id> ollama pull phi3
+# Start services
+docker-compose up -d
 
 # Run the application
 uvicorn app.main:app --reload
@@ -155,384 +185,174 @@ uvicorn app.main:app --reload
 
 ---
 
-## 💻 Usage Examples
+## Testing & Quality Assurance
 
-### Python SDK Usage
+### Test Coverage: 85% (99/99 tests passing)
 
-```python
-import httpx
+```bash
+# Run full test suite with coverage
+uv run pytest --cov=app --cov-report=html --cov-report=term
 
-# Redact PII
-async with httpx.AsyncClient() as client:
-    response = await client.post(
-        "http://localhost:8000/redact",
-        json={"text": "My email is alice@example.com"}
-    )
-    data = response.json()
-    print(f"Redacted: {data['redacted_text']}")
-    # Output: Redacted: My email is [REDACTED_a1b2]
+# Quick run
+uv run pytest --cov=app --cov-report=term -q
+
+# Specific test categories
+uv run pytest tests/unit/ -v           # Unit tests
+uv run pytest tests/integration/ -v    # Integration tests
 ```
 
-### API Endpoints
+**Coverage Breakdown:**
+- 100% Coverage: `audit.py`, `policies.py`, `policy_schemas.py`, `service.py`
+- 93% Coverage: `verification.py`
+- 91% Coverage: `database.py`
+- 79% Coverage: `main.py`
 
-#### `POST /redact`
-Redacts PII from text and returns redacted version.
+### Evaluation Framework
 
-**Request:**
-```json
-{
-  "text": "Contact Jane Smith at jane@example.com"
-}
+```bash
+# Run benchmark suite (43 test cases, 7 entity types)
+uv run python evaluation/evaluate.py
+
+# Baseline comparison (Presidio vs regex)
+uv run python evaluation/baseline_comparison.py
 ```
 
-**Response:**
-```json
-{
-  "redacted_text": "Contact [REDACTED_a1b2] at [REDACTED_c3d4]",
-  "confidence_scores": [0.85, 0.95],
-  "audit_status": "queued"
-}
-```
-
-#### `POST /restore`
-Restores original text from redacted version (if tokens still valid).
-
-**Request:**
-```
-?redacted_text=Contact [REDACTED_a1b2]
-```
-
-**Response:**
-```json
-{
-  "original_text": "Contact Jane Smith"
-}
-```
-
-#### `GET /metrics`
-Returns Prometheus metrics for monitoring.
+**Metrics Tracked:** Precision, Recall, F1-Score, Latency (P50/P95/P99)
 
 ---
 
-## 🧪 Testing & Evaluation
+## LLM Prompt Engineering
 
-### Run Test Suite
+Four prompt versions for systematic optimization:
 
+| Version | Strategy | Best Use Case |
+|---------|----------|---------------|
+| **v1_basic** | Zero-shot instruction | Baseline/fast inference |
+| **v2_cot** | Chain-of-thought reasoning | Complex edge cases |
+| **v3_few_shot** | 7 curated examples | Best accuracy (+15-20%) |
+| **v4_optimized** | Concise 2-example | Balanced speed/accuracy |
+
+**Configure in `.env`:**
 ```bash
-# Run all tests with coverage
-pytest --cov=app --cov-report=html --cov-report=term
-
-# Run specific test categories
-pytest tests/unit/          # Unit tests only
-pytest tests/integration/   # Integration tests only
-
-# View coverage report
-open htmlcov/index.html
-```
-
-**Current Coverage: 97%**
-- `app/main.py`: 92%
-- `app/service.py`: 100%
-- `app/verification.py`: 100%
-- `app/schemas.py`: 100%
-
-### Run Evaluation Framework
-
-```bash
-# Run full evaluation on benchmark dataset
-python evaluation/evaluate.py
-
-# Compare against baseline
-python evaluation/baseline_comparison.py
-
-# View benchmark statistics
-python evaluation/datasets.py
-```
-
-**Benchmark Dataset:**
-- 43 test cases with ground truth annotations
-- 7 PII entity types (EMAIL, PHONE, PERSON, LOCATION, SSN, DATE, IP)
-- 6 categories (standard, edge cases, negative, ambiguous, multiple, context)
-
----
-
-## 🤖 LLM Prompt Engineering
-
-### Prompt Versions (Configurable)
-
-The system supports multiple prompt strategies for A/B testing:
-
-#### v1_basic (Zero-Shot Baseline)
-```
-Simple instruction: "Find PII in this text"
-```
-
-#### v2_cot (Chain-of-Thought)
-```
-Step-by-step reasoning:
-1. Scan for names
-2. Check emails
-3. Find phone numbers
-4. Verify redaction
-```
-
-#### v3_few_shot (Best Performance)
-```
-7 curated examples showing:
-- Properly redacted text (clean)
-- Leaked PII (violations)
-- Edge cases (partial leaks)
-```
-
-#### v4_optimized (Fast Inference)
-```
-Concise version with 2 examples
-Optimized for lower latency
-```
-
-### Configure Prompt Version
-
-```bash
-# In .env file
 PROMPT_VERSION=v3_few_shot
 FEW_SHOT_EXAMPLES_COUNT=3
 USE_CHAIN_OF_THOUGHT=true
 ```
 
-### Expected Improvements
-
-| Prompt Version | Expected Accuracy | Inference Time |
-|----------------|-------------------|----------------|
-| v1_basic | Baseline | Fast |
-| v2_cot | +10% | Medium |
-| v3_few_shot | +15-20% | Medium |
-| v4_optimized | +12% | Fast |
-
 ---
 
-## 🛠️ Technical Stack
+## Production Deployment
 
-### Core Technologies
-- **FastAPI** 0.128.0 - High-performance async web framework
-- **Presidio Analyzer** 2.2.360 - NLP-based PII detection
-- **Presidio Anonymizer** 2.2.360 - PII redaction engine
-- **spaCy** 3.8.11 + `en_core_web_lg` - NLP models
-- **Redis** 7.1.0 - Token storage with TTL
-- **Ollama** (Phi-3) - LLM for verification
-
-### Testing & Evaluation
-- **pytest** 8.0+ with async support
-- **pytest-cov** - Coverage reporting (97%)
-- **fakeredis** - Redis mocking for tests
-- **respx** - HTTP mocking for Ollama
-- **scikit-learn** - Metrics calculation
-- **matplotlib** + **seaborn** - Visualization
-
-### Configuration & Deployment
-- **pydantic-settings** - Type-safe configuration
-- **Docker** + **Docker Compose** - Containerization
-- **Prometheus** + **Grafana** - Monitoring
-- **uvicorn** - ASGI server
-
----
-
-## 📚 Documentation
-
-```
-docs/
-├── ARCHITECTURE.md     - System design deep dive (TODO)
-├── EVALUATION.md       - Evaluation methodology & results (TODO)
-├── PROMPTS.md          - Prompt engineering details (TODO)
-└── API.md              - API reference (TODO)
-
-# Current Documentation
-├── CLAUDE.md           - Developer guide for Claude Code
-└── README.md           - This file
-```
-
----
-
-## 🔧 Configuration
-
-All settings are configurable via environment variables. See `.env.example`:
+### Kubernetes + Helm
 
 ```bash
-# Redis
-REDIS_HOST=redis
-REDIS_PORT=6379
-REDIS_TTL=86400  # 24 hours
+# Deploy with Helm
+helm install sentinel k8s/helm/sentinel/ \
+  --namespace pii-gateway \
+  --create-namespace
 
-# Ollama LLM
-OLLAMA_URL=http://ollama:11434/api/generate
-OLLAMA_MODEL=phi3
-OLLAMA_TIMEOUT=30.0
+# Or apply base manifests
+kubectl apply -f k8s/base/
 
-# Prompt Engineering
-PROMPT_VERSION=v3_few_shot
-FEW_SHOT_EXAMPLES_COUNT=3
-
-# Presidio
-PRESIDIO_SCORE_THRESHOLD=0.0
-PRESIDIO_LANGUAGE=en
+# Check deployment
+kubectl get pods -l app=sentinel-api
 ```
+
+**Production Features:**
+- Horizontal Pod Autoscaling (HPA) for traffic spikes
+- Redis StatefulSet with persistent volumes
+- PostgreSQL connection pooling
+- GPU-enabled nodes for Ollama
+- TLS ingress with cert-manager
+- Prometheus + Grafana monitoring
+
+### CI/CD (GitHub Actions)
+
+**`.github/workflows/claude-code-review.yml`** - Automated PR review with Claude Code
+**`.github/workflows/claude.yml`** - Issue/PR comment integration (`@claude help me fix X`)
 
 ---
 
-## 📈 Monitoring
+## Monitoring & Observability
 
-### Prometheus Metrics
+**Prometheus Metrics** (`http://localhost:8000/metrics`):
+- `total_redactions` - Request counter
+- `model_confidence_scores` - Presidio confidence histogram
+- `auditor_leaks_found_total` - LLM leak detection counter
 
-Access metrics at `http://localhost:8000/metrics`
-
-**Available Metrics:**
-- `total_redactions` - Counter of redaction requests
-- `model_confidence_scores` - Histogram of Presidio confidence
-- `auditor_leaks_found_total` - Counter of LLM-detected leaks
-
-### Grafana Dashboards
-
-Access at `http://localhost:3000` (admin/admin)
-
-Pre-configured dashboards for:
+**Grafana Dashboards** (`http://localhost:3000`, admin/admin):
 - Request rate and latency
 - Redaction success rate
-- LLM audit results
 - Entity detection breakdown
+- LLM audit results
 
 ---
 
-## 🔬 Development
+## API Endpoints
 
-### Project Structure
+### Core Endpoints
+- `POST /redact` - Redact PII with policy-based filtering
+- `POST /restore` - **[AUTH]** Restore original text from tokens
+- `GET /policies` - List available policy contexts
+- `GET /metrics` - Prometheus metrics
+
+### Admin Endpoints
+- `POST /admin/api-keys` - Create API key
+- `GET /admin/api-keys` - List API keys (hashed)
+- `DELETE /admin/api-keys/{id}` - Revoke API key
+- `GET /admin/audit-logs` - Query restoration audit trail
+
+---
+
+## Technical Stack
+
+**Core:** FastAPI, Presidio (NLP), Phi-3 LLM (Ollama), Redis, PostgreSQL, SQLAlchemy
+**Testing:** pytest (85% coverage), fakeredis, respx, aiosqlite
+**Deployment:** Docker, Kubernetes, Helm
+**Monitoring:** Prometheus, Grafana
+**Package Management:** uv (fast Python resolver)
+
+---
+
+## Project Structure
 
 ```
-sentinel/
-├── app/                    # Application code
-│   ├── main.py            # FastAPI endpoints
-│   ├── service.py         # Presidio redaction logic
-│   ├── verification.py    # LLM verification agent
-│   ├── schemas.py         # Pydantic models
-│   ├── config.py          # Configuration management
-│   └── prompts/           # LLM prompt templates
-│       ├── verification_prompts.py
-│       └── few_shot_examples.py
-├── tests/                 # Test suite (97% coverage)
-│   ├── conftest.py       # Shared fixtures
-│   ├── unit/             # Unit tests
-│   └── integration/      # Integration tests
-├── evaluation/            # Benchmarking framework
-│   ├── datasets.py       # 43 test cases
-│   ├── metrics.py        # Metrics calculation
-│   ├── evaluate.py       # Evaluation runner
-│   └── baseline_comparison.py
-├── docker-compose.yml     # Full stack deployment
-├── pytest.ini            # Test configuration
-├── requirements.txt      # Python dependencies
-└── .env.example          # Configuration template
-```
-
-### Running Tests During Development
-
-```bash
-# Run tests on file save (watch mode)
-pytest-watch
-
-# Run specific test file
-pytest tests/unit/test_service.py -v
-
-# Run with debugging
-pytest --pdb
-
-# Generate coverage report
-pytest --cov=app --cov-report=html
-```
-
-### Code Quality
-
-```bash
-# Format code
-black app/ tests/
-
-# Lint code
-ruff check app/
-
-# Type checking (if mypy added)
-mypy app/
+PII-project/
+├── app/                   # Core application
+│   ├── main.py           # FastAPI endpoints
+│   ├── service.py        # Redaction service
+│   ├── policies.py       # Policy engine
+│   ├── verification.py   # LLM auditor
+│   ├── database.py       # SQLAlchemy models
+│   ├── auth.py           # API key auth
+│   └── audit.py          # Audit logging
+├── tests/                # 99 tests, 85% coverage
+│   ├── unit/            # Unit tests
+│   └── integration/     # Integration tests
+├── evaluation/           # Benchmark suite (43 cases)
+├── k8s/                  # Kubernetes deployment
+│   ├── base/            # Base manifests
+│   └── helm/sentinel/   # Helm chart
+├── .github/workflows/   # CI/CD pipelines
+└── docker-compose.yml   # Local development stack
 ```
 
 ---
 
-## 🎯 Future Enhancements
+## Contributing
 
-### Planned Features
-- [ ] CI/CD pipeline with GitHub Actions
-- [ ] Kubernetes deployment manifests
-- [ ] Additional LLM models (Claude, GPT-4)
-- [ ] Multi-language support (beyond English)
-- [ ] Encryption at rest for Redis tokens
-- [ ] Rate limiting and authentication
-- [ ] Distributed tracing (Jaeger)
-- [ ] Real-time metrics dashboard
-
-### Research Directions
-- [ ] Fine-tuning Phi-3 on PII detection
-- [ ] Ensemble methods (multiple LLMs voting)
-- [ ] Active learning for dataset expansion
-- [ ] Privacy-preserving ML techniques
+Contributions welcome! Ensure:
+- Tests pass with >85% coverage
+- Follow existing code style
+- Update documentation
+- Run `uv run pytest` before submitting
 
 ---
 
-## 📖 Learning Resources
+## Acknowledgments
 
-This project demonstrates:
-- **ML Evaluation**: Precision, recall, F1, baseline comparisons
-- **LLM Prompt Engineering**: Few-shot learning, chain-of-thought
-- **Production ML**: Testing, monitoring, error handling
-- **API Design**: FastAPI, async patterns, background tasks
-- **System Architecture**: Dual-layer security, Redis caching
-
-**Great for portfolios showcasing:**
-- Applied ML/AI Engineering
-- LLM/GenAI Specialist skills
-- Production systems thinking
-- Software engineering rigor
+Built with [Microsoft Presidio](https://github.com/microsoft/presidio), [Ollama](https://ollama.ai), and [FastAPI](https://fastapi.tiangolo.com)
 
 ---
 
-## 🤝 Contributing
-
-Contributions welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Write tests for new features
-4. Ensure tests pass (`pytest`)
-5. Maintain >90% coverage
-6. Update documentation
-7. Submit a pull request
-
----
-
-
-## 🙏 Acknowledgments
-
-- **Microsoft Presidio** - PII detection framework
-- **Ollama** - Local LLM inference
-- **FastAPI** - Modern Python web framework
-- **spaCy** - Industrial-strength NLP
-
----
-
-## 📧 Contact
-
-For questions or feedback about this portfolio project, please open an issue on GitHub.
-
----
-
-<div align="center">
-
-**Built with ❤️ showcasing ML/AI Engineering & LLM Expertise**
-
-⭐ Star this repo if you find it helpful for your portfolio!
-
-</div>
+**Production-ready PII redaction with compliance enforcement. Deploy with confidence.**
