@@ -8,6 +8,8 @@ This is an AI-powered PII (Personally Identifiable Information) redaction gatewa
 1. **Primary Layer**: Microsoft Presidio (NLP-based) for PII detection and redaction
 2. **Verification Layer**: LLM-based auditor (Phi-3 via Ollama) that validates redaction quality and purges Redis tokens if leaks are detected
 
+**Package Management**: This project is managed with [uv](https://github.com/astral-sh/uv), a fast Python package installer and resolver. All dependency management commands should use `uv` instead of pip.
+
 ## Architecture
 
 ### Core Components
@@ -112,10 +114,10 @@ This is an AI-powered PII (Personally Identifiable Information) redaction gatewa
 **Run tests**:
 ```bash
 # All tests with coverage
-pytest --cov=app --cov-report=html --cov-report=term
+uv run pytest --cov=app --cov-report=html --cov-report=term
 
 # Specific test file
-pytest tests/unit/test_service.py -v
+uv run pytest tests/unit/test_service.py -v
 
 # View coverage report
 open htmlcov/index.html
@@ -136,13 +138,13 @@ open htmlcov/index.html
 **Run evaluation**:
 ```bash
 # Full evaluation (requires Redis and Ollama running)
-python evaluation/evaluate.py
+uv run python evaluation/evaluate.py
 
 # View dataset statistics
-python evaluation/datasets.py
+uv run python evaluation/datasets.py
 
 # Compare against baseline
-python evaluation/baseline_comparison.py
+uv run python evaluation/baseline_comparison.py
 ```
 
 **Results saved to**: `evaluation/results/benchmark_results.json`
@@ -156,7 +158,7 @@ The `/restore` endpoint requires authentication via API key to ensure secure, au
 **Database Initialization:**
 ```bash
 # Initialize PostgreSQL database and create initial admin API key
-python scripts/init_db.py
+uv run python scripts/init_db.py
 
 # Save the API key displayed - it cannot be retrieved later!
 ```
@@ -271,11 +273,17 @@ curl -X POST http://localhost:8000/redact \
 
 ### Setup
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# Install uv (if not already installed)
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Install dependencies with uv
+uv pip install -r requirements.txt
 
 # Download spaCy language model (required for Presidio)
-python -m spacy download en_core_web_lg
+uv run python -m spacy download en_core_web_lg
+
+# Alternative: Sync dependencies from pyproject.toml
+uv sync
 ```
 
 ### Running Locally
@@ -306,7 +314,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 **Stress test script:**
 ```bash
 # Run after starting services
-python stress_test.py
+uv run python stress_test.py
 ```
 
 This script tests 10 edge cases with tricky PII patterns, waits for LLM auditor, and verifies purge behavior.
@@ -314,7 +322,7 @@ This script tests 10 edge cases with tricky PII patterns, waits for LLM auditor,
 **Manual API testing:**
 ```bash
 # Initialize database and get API key (first time only)
-python scripts/init_db.py
+uv run python scripts/init_db.py
 
 # Redact text
 curl -X POST http://localhost:8000/redact \
