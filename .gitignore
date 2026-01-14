@@ -17,5 +17,14 @@ wheels/
 # Docker volumes
 ollama_data/
 
+# Test coverage
 .coverage
 htmlcov/
+
+# IDE
+.vscode/
+.idea/
+
+# Database
+*.db
+*.sqlite
