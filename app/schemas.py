@@ -34,7 +34,7 @@ class RestoreRequest(BaseModel):
 
 
 class RestoreResponse(BaseModel):
-    """Response from restoration endpoint."""
+    """Response from restoration endpoint (Issue 4: includes missing token warnings)."""
     request_id: uuid.UUID = Field(
         ...,
         description="Unique request ID for audit trail"
@@ -46,6 +46,14 @@ class RestoreResponse(BaseModel):
     tokens_restored: int = Field(
         ...,
         description="Number of tokens successfully restored"
+    )
+    tokens_missing: int = Field(
+        0,
+        description="Number of expired/missing tokens"
+    )
+    warnings: List[str] = Field(
+        default_factory=list,
+        description="Warning messages for missing/expired tokens"
     )
     audit_logged: bool = Field(
         ...,
