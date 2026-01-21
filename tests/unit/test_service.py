@@ -117,61 +117,80 @@ class TestRedactorService:
         for key in keys:
             assert mock_redactor_service.db.get(key) is not None
 
-        # Restore the text
-        restored_text = mock_redactor_service.restore(redacted_text)
+        # Restore the text (Issue 4: now returns dict)
+        result = mock_redactor_service.restore(redacted_text)
 
-        # Verify restoration
-        assert restored_text == original_text
+        # Verify restoration - text should be restored
+        assert result["restored_text"] == original_text
+        # Note: Presidio may detect overlapping entities, so tokens_found <= len(keys)
+        assert result["tokens_found"] > 0
+        assert result["tokens_found"] <= len(keys)
+        assert len(result["warnings"]) == 0
 
     def test_restore_with_missing_keys(self, mock_redactor_service):
-        """Test restore when Redis keys don't exist."""
+        """Test restore when Redis keys don't exist (Issue 4: tracks missing tokens)."""
         redacted_text = "Contact [REDACTED_xxxx] for info"
 
         # Restore (key doesn't exist)
-        restored_text = mock_redactor_service.restore(redacted_text)
+        result = mock_redactor_service.restore(redacted_text)
 
         # Should return text unchanged since key missing
-        assert restored_text == redacted_text
+        assert result["restored_text"] == redacted_text
+        assert result["tokens_found"] == 0
+        assert len(result["tokens_missing"]) == 1
+        assert "[REDACTED_xxxx]" in result["tokens_missing"]
+        assert len(result["warnings"]) == 1
 
     def test_restore_with_expired_keys(self, mock_redactor_service):
-        """Test restore with expired Redis keys."""
+        """Test restore with expired Redis keys (Issue 4: tracks missing)."""
         # Create and redact text
         original_text = "Contact john@example.com"
         redacted_text, _, keys = mock_redactor_service.redact_and_store(original_text)
+
+        # Count actual tokens in redacted text (Presidio may create overlapping entities)
+        import re
+        actual_tokens = re.findall(r"\[REDACTED_[a-z0-9]+\]", redacted_text)
 
         # Delete keys to simulate expiry
         for key in keys:
             mock_redactor_service.db.delete(key)
 
-        # Restore should leave tokens in place
-        restored_text = mock_redactor_service.restore(redacted_text)
-        assert "[REDACTED_" in restored_text
+        # Restore should leave tokens in place and track missing
+        result = mock_redactor_service.restore(redacted_text)
+        assert "[REDACTED_" in result["restored_text"]
+        assert result["tokens_found"] == 0
+        assert len(result["tokens_missing"]) == len(actual_tokens)
+        assert len(result["warnings"]) == len(actual_tokens)
 
     def test_restore_partial_keys(self, mock_redactor_service):
-        """Test restore when some keys exist and some don't."""
+        """Test restore when some keys exist and some don't (Issue 4: partial restoration)."""
         # Manually create redacted text with known tokens
         mock_redactor_service.db.set("[REDACTED_a1b2]", "john@example.com")
         # Don't set [REDACTED_c3d4]
 
         redacted_text = "Email [REDACTED_a1b2] and phone [REDACTED_c3d4]"
-        restored_text = mock_redactor_service.restore(redacted_text)
+        result = mock_redactor_service.restore(redacted_text)
 
         # First token should be restored, second should remain
-        assert "john@example.com" in restored_text
-        assert "[REDACTED_c3d4]" in restored_text
+        assert "john@example.com" in result["restored_text"]
+        assert "[REDACTED_c3d4]" in result["restored_text"]
+        assert result["tokens_found"] == 1
+        assert len(result["tokens_missing"]) == 1
+        assert "[REDACTED_c3d4]" in result["tokens_missing"]
+        assert len(result["warnings"]) == 1
 
     def test_token_format(self, mock_redactor_service, sample_pii_texts):
-        """Test that tokens follow correct format."""
+        """Test that tokens follow correct format (Issue 1: now 16 chars)."""
         text = sample_pii_texts["email"]
         redacted_text, _, _ = mock_redactor_service.redact_and_store(text)
 
-        # Extract tokens
-        tokens = re.findall(r"\[REDACTED_([a-z0-9]{4})\]", redacted_text)
+        # Extract tokens (Issue 1: changed from 4 to 16 characters)
+        tokens = re.findall(r"\[REDACTED_([a-z0-9]{16})\]", redacted_text)
         assert len(tokens) > 0
 
-        # Verify each token is exactly 4 hex characters
+        # Verify each token is exactly 16 hex characters
         for token in tokens:
-            assert len(token) == 4
+            assert len(token) == 16
             assert all(c in "0123456789abcdef" for c in token)
 
     def test_redis_ttl_set(self, mock_redactor_service, sample_pii_texts):
@@ -196,9 +215,11 @@ class TestRedactorService:
         # Tokens should be different
         assert set(keys1) != set(keys2)
 
-        # Both should restore correctly
-        assert "alice@example.com" in mock_redactor_service.restore(redacted1)
-        assert "bob@example.com" in mock_redactor_service.restore(redacted2)
+        # Both should restore correctly (Issue 4: dict return)
+        result1 = mock_redactor_service.restore(redacted1)
+        result2 = mock_redactor_service.restore(redacted2)
+        assert "alice@example.com" in result1["restored_text"]
+        assert "bob@example.com" in result2["restored_text"]
 
     def test_unicode_handling(self, mock_redactor_service):
         """Test handling of Unicode characters in PII."""
@@ -209,7 +230,7 @@ class TestRedactorService:
         assert "José García" not in redacted_text or "[REDACTED_" in redacted_text
         assert len(keys) > 0
 
-        # Should restore correctly
+        # Should restore correctly (Issue 4: dict return)
         if len(keys) > 0:
-            restored = mock_redactor_service.restore(redacted_text)
-            assert "josé@example.com" in restored or "José García" in restored
+            result = mock_redactor_service.restore(redacted_text)
+            assert "josé@example.com" in result["restored_text"] or "José García" in result["restored_text"]
